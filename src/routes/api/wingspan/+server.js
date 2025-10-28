@@ -41,8 +41,8 @@ export async function POST({ request }) {
 			});
 		}
 
-		const batchId = createBatchData.id; // ✅ Extract batch ID
-		console.log('Batch created:', batchId);
+		const batchId = createBatchData.bulkCollaboratorBatchId;
+		console.log('Batch created:', batchId, createBatchData);
 
 		// ✅ 4. Step 2 — Add Collaborator to Batch
 		const addCollaboratorRes = await fetch(

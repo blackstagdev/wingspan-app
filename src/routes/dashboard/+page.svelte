@@ -14,6 +14,8 @@
 	let currentPage = $state(1);
 	const pageSize = 50;
 
+	let filtersActive = $state(false);
+
 	onMount(loadOrders);
 
 	// 🧲 Fetch orders
@@ -83,8 +85,11 @@
 		);
 	}
 
-	// 🔍 Apply filters to raw transactions (in PST), then consolidate
+	// 🔍 Apply filters manually (run only when user clicks button)
 	function applyFilters() {
+		const hasFilters = search || startDate || endDate;
+		if (!hasFilters) return; // no filters to apply
+
 		const s = search.toLowerCase();
 
 		let filtered = allOrders.filter((o) => {
@@ -107,14 +112,20 @@
 
 		filteredOrders = filtered;
 		consolidatedOrders = consolidateData(filtered);
-
 		currentPage = 1;
+		filtersActive = true;
 	}
 
-	// ⚡ Reactively re-filter when filters change
-	$effect(() => {
-		applyFilters();
-	});
+	// 🔄 Clear all filters
+	function clearFilters() {
+		search = '';
+		startDate = '';
+		endDate = '';
+		filteredOrders = allOrders;
+		consolidatedOrders = consolidateData(allOrders);
+		currentPage = 1;
+		filtersActive = false;
+	}
 
 	// 📄 Pagination
 	let totalPages = $derived(Math.max(1, Math.ceil(consolidatedOrders.length / pageSize)));
@@ -134,17 +145,9 @@
 		return DateTime.fromISO(dateISO, { zone: 'America/Los_Angeles' }).toFormat('yyyy-MM-dd HH:mm');
 	}
 
-	// 🔄 Clear all filters
-	function clearFilters() {
-		search = '';
-		startDate = '';
-		endDate = '';
-		applyFilters();
-	}
-
 	// 📤 Export filtered data to CSV
 	function exportCSV() {
-		const rows = consolidatedOrders; // use all filtered data, not paginated
+		const rows = consolidatedOrders; // export all filtered data
 		const headers = ['Affiliate Name', 'Email', 'EIN', 'Total Commission', 'Statuses'];
 
 		const csvContent = [
@@ -191,9 +194,18 @@
 			<span class="text-gray-500">to</span>
 			<input type="date" bind:value={endDate} class="rounded border p-2" />
 		</div>
-		<button onclick={clearFilters} class="rounded border bg-gray-200 px-3 py-1 hover:bg-gray-300">
-			Clear Filters
-		</button>
+
+		<!-- Toggle between Apply and Clear Filter -->
+		{#if filtersActive}
+			<button onclick={clearFilters} class="rounded border bg-gray-200 px-3 py-1 hover:bg-gray-300">
+				Clear Filters
+			</button>
+		{:else}
+			<button onclick={applyFilters} class="rounded border bg-blue-200 px-3 py-1 hover:bg-blue-300">
+				Apply Filter
+			</button>
+		{/if}
+
 		<button onclick={exportCSV} class="rounded border bg-green-200 px-3 py-1 hover:bg-green-300">
 			Export CSV
 		</button>

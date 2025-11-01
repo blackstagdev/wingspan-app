@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 
-const WINGSPAN_API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJtVmlWZjFPRkZtZWN2VkNMQXlLa21GIiwic2Vzc2lvbklkIjoiQmRmcnJHY2xIMVBDQjc4dURIcXZuViIsImlhdCI6MTc2MTYyMTY2N30.pSG6L6qalDpaDNe0kRB3bPGkwGgntfbXSv0eClAU2xA'; // 🔒 move to .env later
-
+// const WINGSPAN_API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJtVmlWZjFPRkZtZWN2VkNMQXlLa21GIiwic2Vzc2lvbklkIjoiQmRmcnJHY2xIMVBDQjc4dURIcXZuViIsImlhdCI6MTc2MTYyMTY2N30.pSG6L6qalDpaDNe0kRB3bPGkwGgntfbXSv0eClAU2xA';
+const WINGSPAN_API_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJjaEVNWFRwc0ZnMWF6YXhKWThOeHVGIiwic2Vzc2lvbklkIjoiZ09ka1B5cUtHZkx1dzJqa1B6NDlPViIsImlhdCI6MTc2MTk2Njg1Mn0.gEMaYMh49eZtK8ueK0zfYfqliYkPbFq4VVGlfhMWXQQ';
 export async function POST({ request }) {
 	// ✅ 1. Check secret
 	const authHeader = request.headers.get('x-api-secret');

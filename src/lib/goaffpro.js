@@ -17,22 +17,14 @@ export async function getAffiliates(date, since_id) {
 
   const res = await fetch(url, {
     headers: {
-      // "X-GOAFFPRO-ACCESS-TOKEN": process.env.GOAFFPRO_API_KEY
       "X-GOAFFPRO-ACCESS-TOKEN":"5d7c7806d9545a1d44d0dfd9da39e4b9fc513d43fe24a56cb9ced3280252ac22"
     }
   });
-  // const res = await fetch(
-  //   `https://api.goaffpro.com/v1/admin/affiliates?created_at_min=${date}&fields=id,name,email,company_name,total_referral_earnings,total_network_earnings,total_other_earnings,number_of_orders,status,created_at, ref_code`,
-  //   { headers: { "X-GOAFFPRO-ACCESS-TOKEN": "5d7c7806d9545a1d44d0dfd9da39e4b9fc513d43fe24a56cb9ced3280252ac22" } }
-  // );
+  
   return res.json();
 }
 
 export async function getOrders(date, since_id) {  
-  // const res = await fetch(
-  //   `https://api.goaffpro.com/v1/admin/orders?created_at_min=${date}&fields=id,affiliate_id,number,total,subtotal,commission,created,customer_email,status,customer`,
-  //   { headers: { "X-GOAFFPRO-ACCESS-TOKEN": "5d7c7806d9545a1d44d0dfd9da39e4b9fc513d43fe24a56cb9ced3280252ac22" } }
-  // );
 
   const url = new URL("https://api.goaffpro.com/v1/admin/orders");
 
@@ -51,7 +43,6 @@ export async function getOrders(date, since_id) {
 
   const res = await fetch(url, {
     headers: {
-      // "X-GOAFFPRO-ACCESS-TOKEN": process.env.GOAFFPRO_API_KEY
       "X-GOAFFPRO-ACCESS-TOKEN":"5d7c7806d9545a1d44d0dfd9da39e4b9fc513d43fe24a56cb9ced3280252ac22"
     }
   });

@@ -11,7 +11,7 @@ export async function GET() {
 	while (true) {
 		const to = from + batchSize - 1;
 		const { data, error } = await supabase
-			.from('affiliate_orders')
+			.from('affiliate_orders_combine')
 			.select('*')
 			.order('created', { ascending: false })
 			.range(from, to);

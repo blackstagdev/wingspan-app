@@ -1,0 +1,105 @@
+export async function getAffiliates(since_id, token) {
+	if (!token) throw new Error("❌ getAffiliates() called without an API token");
+
+	const url = new URL("https://api.goaffpro.com/v1/admin/affiliates");
+
+	if (since_id) url.searchParams.set("since_id", since_id);
+	url.searchParams.set(
+		"fields",
+		"id,name,email,company_name,total_referral_earnings,total_network_earnings,total_other_earnings,number_of_orders,status,created_at,ref_code,tax_identification_number"
+	);
+
+	const res = await fetch(url, {
+		headers: { "X-GOAFFPRO-ACCESS-TOKEN": token }
+	});
+
+	if (!res.ok) {
+		const msg = await res.text();
+		throw new Error(`❌ GoAffPro Affiliates API failed: ${res.status} ${msg}`);
+	}
+
+	return res.json();
+}
+
+export async function getOrders(since_id, token) {
+	if (!token) throw new Error("❌ getOrders() called without an API token");
+
+	const url = new URL("https://api.goaffpro.com/v1/admin/orders");
+
+	if (since_id) url.searchParams.set("since_id", since_id);
+	url.searchParams.set(
+		"fields",
+		"id,affiliate_id,number,total,subtotal,commission,created,customer_email,status,customer"
+	);
+
+	const res = await fetch(url, {
+		headers: { "X-GOAFFPRO-ACCESS-TOKEN": token }
+	});
+
+	if (!res.ok) {
+		const msg = await res.text();
+		throw new Error(`❌ GoAffPro Orders API failed: ${res.status} ${msg}`);
+	}
+
+	return res.json();
+}
+
+// --- Utility functions (unchanged) ---
+
+export function getLastSaleDate(orders) {
+	if (!orders.length) return null;
+	return orders.map((o) => new Date(o.created)).sort((a, b) => b - a)[0];
+}
+
+export function getFirstSaleDate(orders) {
+	if (!orders.length) return null;
+	if (orders.length === 1) return new Date(orders[0].created);
+	return null;
+}
+
+export function getLastOrder(allOrders) {
+	if (!allOrders.length) return null;
+
+	const byCustomer = new Map();
+	for (const o of allOrders) {
+		const key = o.customer?.id ?? o.customer?.email ?? o.customer_email;
+		if (!key) continue;
+
+		const createdAt = new Date(o.created);
+		if (!byCustomer.has(key)) byCustomer.set(key, [createdAt]);
+		else byCustomer.get(key).push(createdAt);
+	}
+
+	const results = [];
+	for (const [key, dates] of byCustomer.entries()) {
+		dates.sort((a, b) => a - b);
+		const lastOrderDate = dates[dates.length - 1].toISOString().split("T")[0];
+		results.push({ customerId: key, lastOrderDate });
+	}
+	return results;
+}
+
+export function getFirstOrder(allOrders) {
+	if (!allOrders.length) return null;
+
+	const byCustomer = new Map();
+	for (const o of allOrders) {
+		const key = o.customer?.id ?? o.customer?.email ?? o.customer_email;
+		if (!key) continue;
+
+		const createdAt = new Date(o.created);
+		if (!byCustomer.has(key)) byCustomer.set(key, [createdAt]);
+		else byCustomer.get(key).push(createdAt);
+	}
+
+	const results = [];
+	for (const [key, dates] of byCustomer.entries()) {
+		dates.sort((a, b) => a - b);
+		let firstOrderDate = null;
+		if (dates.length === 1) {
+			firstOrderDate = dates[0].toISOString().split("T")[0];
+		}
+		results.push({ customerId: key, firstOrderDate });
+	}
+	return results;
+}

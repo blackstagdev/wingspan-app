@@ -27,7 +27,7 @@ export async function saveOrdersToSupabase(orders) {
 		console.log(`📦 Inserting batch ${batchNum}/${Math.ceil(records.length / BATCH_SIZE)} (${batch.length} rows)...`);
 
 		const { error } = await supabase
-			.from('affiliate_orders')
+			.from('affiliate_orders_combine')
 			.upsert(batch, { onConflict: 'order_id' });
 
 		if (error) {

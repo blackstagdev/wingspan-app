@@ -22,7 +22,7 @@ export async function POST({ request }) {
 	try {
 		// ✅ 3. Step 1 — Create Batch
 		const createBatchRes = await fetch(
-			'https://stagingapi.wingspan.app/payments/bulk/collaborator/batch',
+			'https://api.wingspan.app/payments/bulk/collaborator/batch',
 			{
 				method: 'POST',
 				headers: {
@@ -46,7 +46,7 @@ export async function POST({ request }) {
 
 		// ✅ 4. Step 2 — Add Collaborator to Batch
 		const addCollaboratorRes = await fetch(
-			`https://stagingapi.wingspan.app/payments/bulk/collaborator/batch/${batchId}/item`,
+			`https://api.wingspan.app/payments/bulk/collaborator/batch/${batchId}/item`,
 			{
 				method: 'POST',
 				headers: {
@@ -68,7 +68,7 @@ export async function POST({ request }) {
 
 		// ✅ 5. Step 3 — Close the Batch
 		const closeBatchRes = await fetch(
-			`https://stagingapi.wingspan.app/payments/bulk/collaborator/batch/${batchId}`,
+			`https://api.wingspan.app/payments/bulk/collaborator/batch/${batchId}`,
 			{
 				method: 'PATCH',
 				headers: {

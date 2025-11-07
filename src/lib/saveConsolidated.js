@@ -14,7 +14,8 @@ export async function saveOrdersToSupabase(orders) {
 		customer_email: o.customer_email ?? null,
 		customer: o.customer ?? null,
 		status: o.status ?? null,
-		created: o.created ?? null
+		created: o.created ?? null,
+		store: o.store ?? null
 	}));
 
 	const BATCH_SIZE = 1000;

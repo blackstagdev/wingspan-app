@@ -20,9 +20,10 @@ export async function GET() {
 
 		// 2️⃣ Define your 3 API tokens + store labels
 		const TOKENS = [
-			{ token: '5d7c7806d9545a1d44d0dfd9da39e4b9fc513d43fe24a56cb9ced3280252ac22', store: 'alpha_biomed' },
+			{ token: '119b42c4df0c93e49a99896495839db5e5f88878266c2f34b341ce96e6e6967d', store: 'the_peptide_university' },
 			{ token: '19c81baa561789d2092ec2b9c8cf9e6828e6fac60a595ac0796eb8b5709c8b31', store: 'paramount_peptide' },
-			{ token: '119b42c4df0c93e49a99896495839db5e5f88878266c2f34b341ce96e6e6967d', store: 'the_peptide_university' }
+			{ token: '5d7c7806d9545a1d44d0dfd9da39e4b9fc513d43fe24a56cb9ced3280252ac22', store: 'alpha_biomed' }
+
 		];
 
 		// 3️⃣ Fetch from all 3 accounts in parallel

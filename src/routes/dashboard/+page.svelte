@@ -55,20 +55,27 @@
 		for (const o of orders) {
 			const key = o.ein || 'N/A';
 			const createdPST = o.createdPST;
+			const commission = Number(o.commission) || 0;
 
 			if (!map.has(key)) {
 				map.set(key, {
 					ein: o.ein,
 					affiliate_name: o.affiliate_name,
 					affiliate_email: o.affiliate_email,
-					total_commission: Number(o.commission) || 0,
+					total_commission: commission,
+					abm_commission: o.store === 'alpha_biomed' ? commission : 0,
+					paramount_commission: o.store === 'paramount_peptide' ? commission : 0,
+					peptideu_commission: o.store === 'the_peptide_university' ? commission : 0,
 					statuses: new Set([o.status]),
 					first_created: createdPST,
 					last_created: createdPST
 				});
 			} else {
 				const item = map.get(key);
-				item.total_commission += Number(o.commission) || 0;
+				item.total_commission += commission;
+				if (o.store === 'alpha_biomed') item.abm_commission += commission;
+				if (o.store === 'paramount_peptide') item.paramount_commission += commission;
+				if (o.store === 'the_peptide_university') item.peptideu_commission += commission;
 				item.statuses.add(o.status);
 
 				if (DateTime.fromISO(createdPST) < DateTime.fromISO(item.first_created)) {
@@ -157,6 +164,9 @@
 					r.affiliate_name,
 					r.affiliate_email,
 					r.ein,
+					r.abm_commission.toFixed(2),
+					r.paramount_commission.toFixed(2),
+					r.peptideu_commission.toFixed(2),
 					r.total_commission.toFixed(2),
 					Array.from(r.statuses).join('; ')
 				]
@@ -229,6 +239,9 @@
 					<th class="p-3">Affiliate Name</th>
 					<th class="p-3">Email</th>
 					<th class="p-3">EIN</th>
+					<th class="p-3 text-right">ABM LLC</th>
+					<th class="p-3 text-right">Paramount</th>
+					<th class="p-3 text-right">TPU</th>
 					<th class="p-3 text-right">Total Commission</th>
 					<th class="p-3">Statuses</th>
 					<th class="p-3">Date Range</th>
@@ -249,6 +262,9 @@
 							<td class="p-3">{o.affiliate_name}</td>
 							<td class="p-3">{o.affiliate_email}</td>
 							<td class="p-3">{o.ein}</td>
+							<td class="p-3 text-right">${o.abm_commission.toFixed(2)}</td>
+							<td class="p-3 text-right">${o.paramount_commission.toFixed(2)}</td>
+							<td class="p-3 text-right">${o.peptideu_commission.toFixed(2)}</td>
 							<td class="p-3 text-right font-medium">${o.total_commission.toFixed(2)}</td>
 							<td class="p-3 text-gray-600">{Array.from(o.statuses).join(', ')}</td>
 							<td class="p-3 text-gray-500">

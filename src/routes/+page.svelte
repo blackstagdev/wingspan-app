@@ -3,7 +3,16 @@
 	import { goto } from '$app/navigation';
 
 	onMount(() => {
-		goto('/dashboard');
+		// Get current URL info
+		const { pathname, search, hash } = window.location;
+
+		const isRoot = pathname === '/';
+		const hasParams = search.length > 0;
+		const hasHash = hash.length > 0;
+
+		if (isRoot && !hasParams && !hasHash) {
+			goto('/dashboard');
+		}
 	});
 </script>
 

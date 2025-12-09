@@ -100,6 +100,11 @@
 			>
 				Log In
 			</button>
+			<div class="flex justify-end">
+				<a href="/forgot-password" class="text-sm text-blue-600 hover:underline">
+					Forgot your password?
+				</a>
+			</div>
 
 			{#if form?.error}
 				<p class="mt-3 text-center text-sm text-red-500">{form.error}</p>

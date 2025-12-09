@@ -3,17 +3,23 @@
 	import { goto } from '$app/navigation';
 
 	onMount(() => {
-		// Get current URL info
 		const { pathname, search, hash } = window.location;
 
-		const isRoot = pathname === '/';
+		const isRecovery = hash.includes('type=recovery');
+		const isOnRoot = pathname === '/';
+
+		if (isOnRoot && isRecovery) {
+			goto(`/reset-password${hash}`);
+			return;
+		}
+
 		const hasParams = search.length > 0;
 		const hasHash = hash.length > 0;
 
-		if (isRoot && !hasParams && !hasHash) {
+		if (isOnRoot && !hasParams && !hasHash) {
 			goto('/dashboard');
 		}
 	});
 </script>
 
-<p>Redirecting to dashboard...</p>
+<p>Redirecting...</p>

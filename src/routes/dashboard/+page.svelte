@@ -246,11 +246,17 @@
 		</div>
 
 		{#if filtersActive}
-			<button onclick={clearFilters} class="rounded border bg-gray-200 px-3 py-1 hover:bg-gray-300">
+			<button
+				onclick={clearFilters}
+				class="cursor-pointer rounded border bg-gray-200 px-3 py-1 hover:bg-gray-300"
+			>
 				Clear Filters
 			</button>
 		{:else}
-			<button onclick={applyFilters} class="rounded border bg-blue-200 px-3 py-1 hover:bg-blue-300">
+			<button
+				onclick={applyFilters}
+				class="cursor-pointer rounded border bg-blue-200 px-3 py-1 hover:bg-blue-300"
+			>
 				Apply Filter
 			</button>
 		{/if}

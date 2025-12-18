@@ -1,23 +1,27 @@
+// saveAff/+server.js
 import { json } from '@sveltejs/kit';
-import { saveOrdersToSupabase } from '$lib/saveConsolidated';
+import { saveAffiliateTransactionsToSupabase } from '$lib/saveConsolidated';
 
 export async function POST({ request }) {
 	try {
-		const orders = await request.json();
+		const body = await request.json();
+		const transactions = body?.transactions ?? [];
 
-		if (!Array.isArray(orders)) {
-			return json({ error: 'Expected an array of orders' }, { status: 400 });
+		if (!transactions.length) {
+			return json({ success: true, inserted: 0 });
 		}
 
-		const result = await saveOrdersToSupabase(orders);
+		const result = await saveAffiliateTransactionsToSupabase(transactions);
 
 		return json({
 			success: true,
-			inserted: result.length,
-			data: result
+			inserted: result.totalInserted
 		});
 	} catch (err) {
-		console.error('❌ Error saving orders:', err);
-		return json({ success: false, error: err.message }, { status: 500 });
+		console.error('❌ saveAff failed:', err);
+		return json(
+			{ success: false, error: err.message },
+			{ status: 500 }
+		);
 	}
 }

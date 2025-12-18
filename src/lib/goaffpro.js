@@ -49,6 +49,7 @@ export async function getOrders(date, since_id) {
   return res.json();
 }
 
+
 export function getLastSaleDate(orders) {
     if (!orders.length) return null;
     return orders

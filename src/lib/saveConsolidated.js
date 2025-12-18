@@ -50,3 +50,53 @@ export async function saveOrdersToSupabase(orders) {
 	};
 }
 
+export async function saveAffiliateTransactionsToSupabase(transactions) {
+	console.log(`💾 Saving ${transactions.length} affiliate transactions to Supabase...`);
+
+	const records = transactions.map((t) => ({
+		date: t.date, // already normalized
+		affiliate_id: Number(t.affiliate_id),
+
+		// ✅ store affiliate snapshot
+		affiliate_name: t.affiliate_name ?? null,
+		affiliate_email: t.affiliate_email ?? null,
+		ein: t.ein ?? null,
+
+		entity_type: t.entity_type ?? 'transaction',
+		amount: Number(t.amount) || 0,
+		is_paid: t.is_paid ?? false,
+		store: t.store ?? 'unknown'
+	}));
+
+	const BATCH_SIZE = 1000;
+	let totalInserted = 0;
+	const failedBatches = [];
+
+	for (let i = 0; i < records.length; i += BATCH_SIZE) {
+		const batch = records.slice(i, i + BATCH_SIZE);
+		const batchNum = i / BATCH_SIZE + 1;
+
+		const { error } = await supabase
+			.from('affiliate_transaction')
+			.insert(batch);
+
+		if (error) {
+			console.error(`❌ Batch ${batchNum} failed:`, error.message);
+			failedBatches.push(batchNum);
+			continue;
+		}
+
+		totalInserted += batch.length;
+	}
+
+	console.log(`🏁 Done — ${totalInserted} total inserted, ${failedBatches.length} failed.`);
+
+	return {
+		success: failedBatches.length === 0,
+		totalInserted,
+		failedBatches
+	};
+}
+
+
+

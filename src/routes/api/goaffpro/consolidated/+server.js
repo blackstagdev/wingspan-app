@@ -1,58 +1,74 @@
 import { json } from '@sveltejs/kit';
-import { getAffiliates, getOrders } from '$lib/goaffprocombine';
+import { getAffiliates, getTransactions } from '$lib/goaffprocombine';
 import supabase from '$lib/supabaseServer';
 
 export async function GET() {
-	console.log('🔹 Starting order enrichment GET...');
+	console.log('🔹 Starting affiliate transaction enrichment GET...');
 
 	try {
-		// 1️⃣ Get current since_ids from Supabase
+		// 1️⃣ Get affiliate since_id (transactions are full pull)
 		const { data: syncRows, error: syncError } = await supabase
 			.from('goaffpro_sync_combine')
 			.select('name, since_id');
 
 		if (syncError) throw syncError;
 
-		const affiliateSinceId = syncRows.find((r) => r.name === 'affiliate')?.since_id ?? null;
-		const orderSinceId = syncRows.find((r) => r.name === 'orders')?.since_id ?? null;
+		const affiliateSinceId =
+			syncRows.find((r) => r.name === 'affiliate')?.since_id ?? null;
 
-		console.log(`📍 Current since_id → affiliates: ${affiliateSinceId}, orders: ${orderSinceId}`);
+		console.log(`📍 since_id → affiliates: ${affiliateSinceId}`);
 
-		// 2️⃣ Define your 3 API tokens + store labels
+		// 2️⃣ API tokens
 		const TOKENS = [
-			{ token: '119b42c4df0c93e49a99896495839db5e5f88878266c2f34b341ce96e6e6967d', store: 'the_peptide_university' },
-			{ token: '04fe42fda80a9b50f064c6314fdc8c4db84cd779c1988250000b4e91e8a273bd', store: 'paramount_peptide' },
-			{ token: '5d7c7806d9545a1d44d0dfd9da39e4b9fc513d43fe24a56cb9ced3280252ac22', store: 'alpha_biomed' }
-
+			{
+				token: '119b42c4df0c93e49a99896495839db5e5f88878266c2f34b341ce96e6e6967d',
+				store: 'the_peptide_university'
+			},
+			{
+				token: '04fe42fda80a9b50f064c6314fdc8c4db84cd779c1988250000b4e91e8a273bd',
+				store: 'paramount_peptide'
+			},
+			{
+				token: '5d7c7806d9545a1d44d0dfd9da39e4b9fc513d43fe24a56cb9ced3280252ac22',
+				store: 'alpha_biomed'
+			}
 		];
 
-		// 3️⃣ Fetch from all 3 accounts in parallel
-		const affiliatePromises = TOKENS.map(({ token }) => getAffiliates(affiliateSinceId, token));
-		const orderPromises = TOKENS.map(({ token }) => getOrders(orderSinceId, token));
+		// 3️⃣ Fetch affiliates (blocking)
+		const affiliateResults = await Promise.all(
+			TOKENS.map(({ token }) => getAffiliates(affiliateSinceId, token))
+		);
 
-		const [affiliatesResults, ordersResults] = await Promise.all([
-			Promise.all(affiliatePromises),
-			Promise.all(orderPromises)
-		]);
+		// 4️⃣ Fetch transactions (non-blocking)
+		let transactionResults = [];
+		try {
+			transactionResults = await Promise.all(
+				TOKENS.map(({ token }) => getTransactions(token))
+			);
+		} catch {
+			console.warn('⚠️ Transactions fetch failed — continuing');
+		}
 
-		// 4️⃣ Attach store name and flatten results
-		const affiliates = affiliatesResults.flatMap((res, idx) =>
+		// 5️⃣ Flatten + attach store
+		const affiliates = affiliateResults.flatMap((res, idx) =>
 			(res?.affiliates ?? []).map((a) => ({
 				...a,
 				store: TOKENS[idx].store
 			}))
 		);
 
-		const orders = ordersResults.flatMap((res, idx) =>
-			(res?.orders ?? []).map((o) => ({
-				...o,
+		const transactions = transactionResults.flatMap((res, idx) =>
+			(res?.transactions ?? []).map((t) => ({
+				...t,
 				store: TOKENS[idx].store
 			}))
 		);
 
-		console.log(`📦 Got ${affiliates.length} affiliates and ${orders.length} orders from ${TOKENS.length} accounts`);
+		console.log(
+			`📦 affiliates=${affiliates.length}, transactions=${transactions.length}`
+		);
 
-		// 5️⃣ Normalize emails (lowercase) and unify EINs by email
+		// 6️⃣ Normalize EINs by email
 		const byEmail = new Map();
 
 		for (const a of affiliates) {
@@ -60,90 +76,62 @@ export async function GET() {
 			if (!email) continue;
 
 			if (!byEmail.has(email)) {
-				byEmail.set(email, { ...a }); // first occurrence
+				byEmail.set(email, { ...a });
 			} else {
 				const existing = byEmail.get(email);
-				// If this one has EIN and existing doesn't, copy it
 				if (!existing.tax_identification_number && a.tax_identification_number) {
 					existing.tax_identification_number = a.tax_identification_number;
 				}
-				// If existing has EIN and this one doesn't, assign EIN to this affiliate too
 				if (existing.tax_identification_number && !a.tax_identification_number) {
 					a.tax_identification_number = existing.tax_identification_number;
 				}
-				// Merge back
-				byEmail.set(email, existing);
 			}
 		}
 
-		// After EIN unification, rebuild affiliateMap (by ID)
+		// 7️⃣ Build affiliate lookup (normalized ID)
 		const affiliateMap = new Map(
 			affiliates.map((a) => [
-				a.id,
+				Number(a.id),
 				{
-					name: a.name ?? null,
-					email: a.email?.toLowerCase() ?? null,
-					ein: a.tax_identification_number ?? null,
-					store: a.store
+					affiliate_name: a.name ?? null,
+					affiliate_email: a.email?.toLowerCase() ?? null,
+					ein: a.tax_identification_number ?? null
 				}
 			])
 		);
 
-		// 6️⃣ Filter only approved orders
-		const approvedOrders = orders.filter(
-			(o) => o.status?.toLowerCase() === 'approved'
-		);
+		// 8️⃣ Enrich transactions (SOURCE OF TRUTH)
+		const enrichedTransactions = transactions.map((t) => {
+			const affiliateId = Number(t.affiliate_id);
+			const affiliate = affiliateMap.get(affiliateId);
 
-		console.log(`✅ Found ${approvedOrders.length} approved orders`);
-
-		// 7️⃣ Enrich with affiliate info (unchanged, just adds store)
-		const enrichedOrders = approvedOrders.map((order) => {
-			const affiliate = affiliateMap.get(order.affiliate_id);
 			return {
-				order_id: order.id,
-				affiliate_id: order.affiliate_id,
-				affiliate_name: affiliate?.name ?? null,
-				affiliate_email: affiliate?.email ?? null,
+				date: t.created_at, // ✅ correct + NOT NULL safe
+				affiliate_id: affiliateId,
+
+				affiliate_name: affiliate?.affiliate_name ?? null,
+				affiliate_email: affiliate?.affiliate_email ?? null,
 				ein: affiliate?.ein ?? null,
-				commission: Number(order.commission) || 0,
-				customer_email: order.customer_email ?? null,
-				customer: order.customer ?? null,
-				status: order.status ?? null,
-				created: order.created,
-				store: order.store
+
+				entity_type: t.entity_type ?? 'transaction',
+				amount: Number(t.amount) || 0,
+				is_paid: t.status?.toLowerCase() === 'paid',
+				store: t.store
 			};
 		});
 
-		console.log(`✅ Enriched ${enrichedOrders.length} orders successfully`);
+		console.log(`✅ Enriched transactions=${enrichedTransactions.length}`);
 
-		// 8️⃣ Find latest IDs (so we can update goaffpro_sync)
-		const latestAffiliateId = affiliates.length ? Math.max(...affiliates.map((a) => a.id)) : affiliateSinceId;
-		const latestOrderId = orders.length ? Math.max(...orders.map((o) => o.id)) : orderSinceId;
-
-		// 9️⃣ Update Supabase with new since_ids
-		if (latestAffiliateId > affiliateSinceId) {
-			await supabase
-				.from('goaffpro_sync_combine')
-				.update({ since_id: latestAffiliateId })
-				.eq('name', 'affiliate');
-			console.log(`🔁 Updated affiliate since_id → ${latestAffiliateId}`);
-		}
-
-		if (latestOrderId > orderSinceId) {
-			await supabase
-				.from('goaffpro_sync_combine')
-				.update({ since_id: latestOrderId })
-				.eq('name', 'orders');
-			console.log(`🔁 Updated orders since_id → ${latestOrderId}`);
-		}
-
-		// 🔟 Return enriched results
+		// 9️⃣ Return (orders removed)
 		return json({
-			total_orders: enrichedOrders.length,
-			orders: enrichedOrders
+			total_transactions: enrichedTransactions.length,
+			transactions: enrichedTransactions
 		});
 	} catch (error) {
-		console.error('❌ Error in order enrichment API:', error);
-		return json({ error: 'Failed to fetch and enrich orders' }, { status: 500 });
+		console.error('❌ Error in enrichment API:', error);
+		return json(
+			{ error: 'Failed to fetch and enrich affiliate transactions' },
+			{ status: 500 }
+		);
 	}
 }

@@ -44,6 +44,23 @@ export async function getOrders(since_id, token) {
 	return res.json();
 }
 
+export async function getTransactions(token) {
+	if (!token) throw new Error("❌ getOrders() called without an API token");
+
+	const url = new URL("https://api.goaffpro.com/v1/admin/transactions?is_paid=false");
+
+	const res = await fetch(url, {
+		headers: { "X-GOAFFPRO-ACCESS-TOKEN": token }
+	});
+
+	if (!res.ok) {
+		const msg = await res.text();
+		throw new Error(`❌ GoAffPro Orders API failed: ${res.status} ${msg}`);
+	}
+
+	return res.json();
+}
+  
 // --- Utility functions (unchanged) ---
 
 export function getLastSaleDate(orders) {

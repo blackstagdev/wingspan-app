@@ -2,9 +2,10 @@
 	import { onMount } from 'svelte';
 	import { DateTime } from 'luxon';
 
-	let allOrders = $state([]);
-	let filteredOrders = $state([]);
-	let consolidatedOrders = $state([]);
+	// 🔥 Source of truth: transactions ONLY
+	let allTransactions = $state([]);
+	let filteredTransactions = $state([]);
+	let consolidatedTransactions = $state([]);
 
 	let search = $state('');
 	let startDate = $state('');
@@ -16,128 +17,155 @@
 
 	let filtersActive = $state(false);
 
-	onMount(loadOrders);
+	onMount(loadData);
 
-	// 🧲 Fetch orders
-	async function loadOrders() {
+	// 🧲 Fetch + normalize transactions
+	async function loadData() {
 		try {
 			loading = true;
-			console.log('📦 Fetching affiliate orders...');
+			console.log('📦 Fetching affiliate transactions...');
+
 			const res = await fetch('/api/goaffpro/getAff');
 			const data = await res.json();
 
-			if (res.ok && data.orders) {
-				// Convert all dates to PST immediately
-				allOrders = data.orders.map((o) => ({
-					...o,
-					createdPST: DateTime.fromISO(o.created, { zone: 'utc' })
-						.setZone('America/Los_Angeles')
-						.toISO()
+			if (!res.ok) throw new Error(data.error || 'Failed to load data');
+
+			const transactions = data.transactions ?? [];
+
+			// ✅ Normalize + filter earnings transactions
+			allTransactions = transactions
+				.filter((t) => t.entity_type === 'orders' || t.entity_type === 'rewards')
+				.map((t) => ({
+					affiliate_id: Number(t.affiliate_id),
+					affiliate_name: t.affiliate_name ?? null,
+					affiliate_email: t.affiliate_email ?? null,
+					ein: t.ein ?? null,
+
+					entity_type: t.entity_type,
+					store: t.store,
+					amount: Number(t.amount) || 0,
+
+					// ✅ PST date (LA)
+					datePST: t.date
+						? DateTime.fromISO(t.date, { zone: 'utc' }).setZone('America/Los_Angeles').toISO()
+						: null
 				}));
 
-				filteredOrders = allOrders;
-				consolidatedOrders = consolidateData(allOrders);
-				console.log(`✅ Loaded ${data.total_orders} records from Supabase`);
-			} else {
-				console.error('❌ Failed to load orders:', data.error);
-			}
+			filteredTransactions = allTransactions;
+			consolidatedTransactions = consolidateTransactions(allTransactions);
+			currentPage = 1;
+			filtersActive = false;
+
+			console.log(`✅ Loaded ${allTransactions.length} earning transactions`);
+			console.log('🧪 Sample transaction:', allTransactions[0]);
 		} catch (err) {
-			console.error('❌ Error loading orders:', err);
+			console.error('❌ Error loading data:', err);
 		} finally {
 			loading = false;
 		}
 	}
 
-	// 🧮 Consolidate by EIN (grouping all transactions) using PST dates
-	function consolidateData(orders) {
+	// 🧮 Consolidate by EIN (TRANSACTION-BASED)
+	function consolidateTransactions(transactions) {
 		const map = new Map();
 
-		for (const o of orders) {
-			const key = o.ein || 'N/A';
-			const createdPST = o.createdPST;
-			const commission = Number(o.commission) || 0;
+		for (const t of transactions) {
+			if (!t.datePST) continue;
+
+			const key = t.ein || 'N/A';
+			const amount = t.amount;
+			const date = t.datePST;
 
 			if (!map.has(key)) {
 				map.set(key, {
-					ein: o.ein,
-					affiliate_name: o.affiliate_name,
-					affiliate_email: o.affiliate_email,
-					total_commission: commission,
-					abm_commission: o.store === 'alpha_biomed' ? commission : 0,
-					paramount_commission: o.store === 'paramount_peptide' ? commission : 0,
-					peptideu_commission: o.store === 'the_peptide_university' ? commission : 0,
-					statuses: new Set([o.status]),
-					first_created: createdPST,
-					last_created: createdPST
+					ein: t.ein,
+					affiliate_name: t.affiliate_name,
+					affiliate_email: t.affiliate_email,
+
+					total_commission: amount,
+					abm_commission: t.store === 'alpha_biomed' ? amount : 0,
+					paramount_commission: t.store === 'paramount_peptide' ? amount : 0,
+					peptideu_commission: t.store === 'the_peptide_university' ? amount : 0,
+
+					entity_types: new Set([t.entity_type]),
+					first_created: date,
+					last_created: date
 				});
 			} else {
 				const item = map.get(key);
-				item.total_commission += commission;
-				if (o.store === 'alpha_biomed') item.abm_commission += commission;
-				if (o.store === 'paramount_peptide') item.paramount_commission += commission;
-				if (o.store === 'the_peptide_university') item.peptideu_commission += commission;
-				item.statuses.add(o.status);
 
-				if (DateTime.fromISO(createdPST) < DateTime.fromISO(item.first_created)) {
-					item.first_created = createdPST;
+				item.total_commission += amount;
+
+				if (t.store === 'alpha_biomed') item.abm_commission += amount;
+				if (t.store === 'paramount_peptide') item.paramount_commission += amount;
+				if (t.store === 'the_peptide_university') item.peptideu_commission += amount;
+
+				item.entity_types.add(t.entity_type);
+
+				if (DateTime.fromISO(date) < DateTime.fromISO(item.first_created)) {
+					item.first_created = date;
 				}
-				if (DateTime.fromISO(createdPST) > DateTime.fromISO(item.last_created)) {
-					item.last_created = createdPST;
+				if (DateTime.fromISO(date) > DateTime.fromISO(item.last_created)) {
+					item.last_created = date;
 				}
 			}
 		}
 
 		return Array.from(map.values()).sort((a, b) =>
-			a.affiliate_name?.localeCompare(b.affiliate_name)
+			(a.affiliate_name ?? '').localeCompare(b.affiliate_name ?? '')
 		);
 	}
 
-	// 🔍 Apply filters manually (run only when user clicks button)
+	// 🔍 Filters (transaction-based)
 	function applyFilters() {
 		const hasFilters = search || startDate || endDate;
-		if (!hasFilters) return; // no filters to apply
+		if (!hasFilters) return;
 
 		const s = search.toLowerCase();
 
-		let filtered = allOrders.filter((o) => {
+		const start = startDate
+			? DateTime.fromISO(startDate, { zone: 'America/Los_Angeles' }).startOf('day')
+			: null;
+
+		const end = endDate
+			? DateTime.fromISO(endDate, { zone: 'America/Los_Angeles' }).endOf('day')
+			: null;
+
+		const filtered = allTransactions.filter((t) => {
 			const matchesSearch =
-				o.affiliate_name?.toLowerCase().includes(s) ||
-				o.affiliate_email?.toLowerCase().includes(s) ||
-				o.ein?.toLowerCase?.().includes(s);
+				t.affiliate_name?.toLowerCase().includes(s) ||
+				t.affiliate_email?.toLowerCase().includes(s) ||
+				t.ein?.toLowerCase?.().includes(s);
 
-			const date = DateTime.fromISO(o.createdPST);
-			const start = startDate
-				? DateTime.fromISO(startDate, { zone: 'America/Los_Angeles' }).startOf('day')
-				: null;
-			const end = endDate
-				? DateTime.fromISO(endDate, { zone: 'America/Los_Angeles' }).endOf('day')
-				: null;
+			if (!matchesSearch) return false;
+			if (!start && !end) return true;
+			if (!t.datePST) return false;
 
-			const matchesDate = (!start || date >= start) && (!end || date <= end);
-			return matchesSearch && matchesDate;
+			const date = DateTime.fromISO(t.datePST);
+			return (!start || date >= start) && (!end || date <= end);
 		});
 
-		filteredOrders = filtered;
-		consolidatedOrders = consolidateData(filtered);
+		filteredTransactions = filtered;
+		consolidatedTransactions = consolidateTransactions(filtered);
 		currentPage = 1;
 		filtersActive = true;
 	}
 
-	// 🔄 Clear all filters
 	function clearFilters() {
 		search = '';
 		startDate = '';
 		endDate = '';
-		filteredOrders = allOrders;
-		consolidatedOrders = consolidateData(allOrders);
+		filteredTransactions = allTransactions;
+		consolidatedTransactions = consolidateTransactions(allTransactions);
 		currentPage = 1;
 		filtersActive = false;
 	}
 
 	// 📄 Pagination
-	let totalPages = $derived(Math.max(1, Math.ceil(consolidatedOrders.length / pageSize)));
+	let totalPages = $derived(Math.max(1, Math.ceil(consolidatedTransactions.length / pageSize)));
+
 	let paginated = $derived(
-		consolidatedOrders.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+		consolidatedTransactions.slice((currentPage - 1) * pageSize, currentPage * pageSize)
 	);
 
 	function nextPage() {
@@ -147,30 +175,44 @@
 		if (currentPage > 1) currentPage--;
 	}
 
-	// Format PST date for display
 	function formatPST(dateISO) {
+		if (!dateISO) return '';
 		return DateTime.fromISO(dateISO, { zone: 'America/Los_Angeles' }).toFormat('yyyy-MM-dd HH:mm');
 	}
 
-	// 📤 Export filtered data to CSV
+	// 📤 Export CSV
 	function exportCSV() {
-		const rows = consolidatedOrders; // export all filtered data
-		const headers = ['Affiliate Name', 'Email', 'EIN', 'Total Commission', 'Statuses'];
+		const rows = consolidatedTransactions;
+
+		const headers = [
+			'Affiliate Name',
+			'Email',
+			'EIN',
+			'ABM LLC',
+			'Paramount',
+			'TPU',
+			'Total',
+			'Entity Types',
+			'First Transaction (PST)',
+			'Last Transaction (PST)'
+		];
 
 		const csvContent = [
 			headers.join(','),
 			...rows.map((r) =>
 				[
-					r.affiliate_name,
-					r.affiliate_email,
-					r.ein,
-					r.abm_commission.toFixed(2),
-					r.paramount_commission.toFixed(2),
-					r.peptideu_commission.toFixed(2),
-					r.total_commission.toFixed(2),
-					Array.from(r.statuses).join('; ')
+					r.affiliate_name ?? '',
+					r.affiliate_email ?? '',
+					r.ein ?? '',
+					Number(r.abm_commission || 0).toFixed(2),
+					Number(r.paramount_commission || 0).toFixed(2),
+					Number(r.peptideu_commission || 0).toFixed(2),
+					Number(r.total_commission || 0).toFixed(2),
+					Array.from(r.entity_types ?? []).join('; '),
+					r.first_created ? formatPST(r.first_created) : '',
+					r.last_created ? formatPST(r.last_created) : ''
 				]
-					.map((v) => `"${v}"`)
+					.map((v) => `"${String(v).replaceAll('"', '""')}"`)
 					.join(',')
 			)
 		].join('\n');
@@ -178,11 +220,8 @@
 		const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
 		const url = URL.createObjectURL(blob);
 		const link = document.createElement('a');
-		link.setAttribute('href', url);
-		link.setAttribute(
-			'download',
-			`affiliate_orders_${DateTime.now().toFormat('yyyyLLdd_HHmm')}.csv`
-		);
+		link.href = url;
+		link.download = `affiliate_transactions_${DateTime.now().toFormat('yyyyLLdd_HHmm')}.csv`;
 		link.click();
 		URL.revokeObjectURL(url);
 	}
@@ -199,13 +238,13 @@
 			placeholder="Search name, email, or EIN"
 			class="min-w-[250px] flex-1 rounded border p-2"
 		/>
+
 		<div class="flex items-center gap-2">
 			<input type="date" bind:value={startDate} class="rounded border p-2" />
 			<span class="text-gray-500">to</span>
 			<input type="date" bind:value={endDate} class="rounded border p-2" />
 		</div>
 
-		<!-- Toggle between Apply and Clear Filter -->
 		{#if filtersActive}
 			<button onclick={clearFilters} class="rounded border bg-gray-200 px-3 py-1 hover:bg-gray-300">
 				Clear Filters
@@ -226,8 +265,8 @@
 		{#if loading}
 			Loading data... ⏳
 		{:else}
-			Showing <strong>{consolidatedOrders.length}</strong> affiliates (from
-			{filteredOrders.length} filtered transactions / {allOrders.length} total)
+			Showing <strong>{consolidatedTransactions.length}</strong> affiliates (from
+			{filteredTransactions.length} filtered transactions / {allTransactions.length} total)
 		{/if}
 	</div>
 
@@ -243,21 +282,22 @@
 					<th class="p-3 text-right">Paramount</th>
 					<th class="p-3 text-right">TPU</th>
 					<th class="p-3 text-right">Total Commission</th>
-					<th class="p-3">Statuses</th>
-					<th class="p-3">Date Range</th>
+					<th class="p-3">Entity Types</th>
+					<th class="p-3">Date Range (PST)</th>
 				</tr>
 			</thead>
+
 			<tbody>
 				{#if loading}
 					<tr>
-						<td colspan="6" class="p-4 text-center text-gray-500">Loading records...</td>
+						<td colspan="9" class="p-4 text-center text-gray-500">Loading records...</td>
 					</tr>
-				{:else if consolidatedOrders.length === 0}
+				{:else if consolidatedTransactions.length === 0}
 					<tr>
-						<td colspan="6" class="p-4 text-center text-gray-500">No matching records found.</td>
+						<td colspan="9" class="p-4 text-center text-gray-500">No matching records found.</td>
 					</tr>
 				{:else}
-					{#each paginated as o (o.ein)}
+					{#each paginated as o (o.ein ?? 'N/A')}
 						<tr class="border-b hover:bg-gray-50">
 							<td class="p-3">{o.affiliate_name}</td>
 							<td class="p-3">{o.affiliate_email}</td>
@@ -266,7 +306,7 @@
 							<td class="p-3 text-right">${o.paramount_commission.toFixed(2)}</td>
 							<td class="p-3 text-right">${o.peptideu_commission.toFixed(2)}</td>
 							<td class="p-3 text-right font-medium">${o.total_commission.toFixed(2)}</td>
-							<td class="p-3 text-gray-600">{Array.from(o.statuses).join(', ')}</td>
+							<td class="p-3 text-gray-600">{Array.from(o.entity_types).join(', ')}</td>
 							<td class="p-3 text-gray-500">
 								{formatPST(o.first_created)} → {formatPST(o.last_created)}
 							</td>
@@ -278,7 +318,7 @@
 	</div>
 
 	<!-- 📄 Pagination -->
-	{#if !loading && consolidatedOrders.length > 0}
+	{#if !loading && consolidatedTransactions.length > 0}
 		<div class="mt-6 flex items-center justify-between text-sm text-gray-600">
 			<div>
 				Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong>
